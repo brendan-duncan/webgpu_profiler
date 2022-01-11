@@ -128,8 +128,7 @@ class WebGPUProfiler {
         let doc = this.debuggerWindow.document;
         let frameTrace = doc.getElementById('commandList');
         let currentFrame = this._frames[frameNumber];
-        if (!currentFrame)
-            return;
+        if (!currentFrame) return;
         frameTrace.innerHTML = '';
         
         let div = doc.createElement("div");
@@ -137,28 +136,36 @@ class WebGPUProfiler {
         div.innerHTML = `FRAME ${frameNumber}`;
         frameTrace.appendChild(div);
 
+        let currentPass = frameTrace;
+
         let callNumber = 1;
         currentFrame.commands.forEach((call) => {
-            let div = doc.createElement("div");
-            let ret = ''
             let objClass = call[0];
             let objId = call[1];
-            let objMethod = call[2];
+            let method = call[2];
             let args = this._stringifyArgs(call[4][0]);
 
-            /*
-            var args = '';
-            for(var i = 0; i < call.args.length; ++i) {
-                if (i != 0) args += ', ';
-                if (sig.argNames) args += `<span class='functionArgName'>${sig.argNames[i]}: </span>`;
-                args += this.decorateType(sig.args[i], call.args[i], sig, call);
-            }*/
+            if (method == "beginRenderPass") {
+                currentPass = doc.createElement("div");
+                currentPass.classList = "renderpass";
+                frameTrace.appendChild(currentPass);
+            } else if (method == "beginComputePass") {
+                currentPass = doc.createElement("div");
+                currentPass.classList = "computepass";
+                frameTrace.appendChild(currentPass);
+            }
 
-            div.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='objectName'>${objClass}@${objId}</span>.<span class='functionName'>${objMethod}</span>(<span class='functionArgs'>${args}</span>)`;
-            /*if (this.webGLFunctionClassNames[call.functionName]) {
-                div.classList.add(this.webGLFunctionClassNames[call.functionName]);
-            }*/
-            frameTrace.appendChild(div);
+            let div = doc.createElement("div");
+
+            if (WebGPUProfiler._slowMethods.indexOf(method) != -1)
+                div.classList.add("createMethod");
+
+            div.innerHTML = `<span class='callnum'>${callNumber++}.</span> <span class='objectName'>${objClass}@${objId}</span>.<span class='functionName'>${method}</span>(<span class='functionArgs'>${args}</span>)`;
+
+            currentPass.appendChild(div);
+
+            if (method == "endPass")
+                currentPass = frameTrace;
         });
     }
 
@@ -204,61 +211,28 @@ class WebGPUProfiler {
         }
     }
 
-    _stringifyObject(object) {
+    _stringifyArgs(args, writeKeys=false) {
         let s = "";
-        let first = true;
-        for (let key in object) {
-            let value = object[key];
-            if (value === undefined) {
-                continue;
-            }
-            if (!first) s += ",";
-            first = false;
-            s += `"${key}":`;
-            if (value === null) {
-                s += "null";
-            } else if (typeof(value) == "string") {
-                s += `\`${value}\``;
-            } else if (value.__id !== undefined) {
-                s += `${value.constructor.name}@${value.__id}`;
-            } else if (value.buffer !== undefined || (value.length && value.length > 10)) {
-                s += `[...${value.length}]`;
-            } else if (value.constructor == Array) {
-                s += this._stringifyArray(value);
-            } else if (typeof(value) == "object") {
-                s += this._stringifyObject(value);
-            } else {
-                s += `${value}`;
-            }
-        }
-        s = "{" + s + "}";
-        return s;
-    }
-
-    _stringifyArray(a) {
-        let s = "[";
-        s += this._stringifyArgs(a);
-        s += "]";
-        return s;
-    }
-
-    _stringifyArgs(args) {
-        let s = "";
-        for (let a of args) {
+        for (let key in args) {
+            let a = args[key];
             if (s != "")
                 s += ", ";
+
+            if (writeKeys)
+                s += `"${key}":`;
+
             if (!a)
                 s += a;
             else if (typeof(a) == "string")
                 s += `\`${a}\``;
-            else if (a.buffer !== undefined || (a.length && a.length > 10))
-                s += `[...${a.length}]`;
+            else if (a.length && a.length > 10)
+                s += `${a.constructor.name}(${a.length})`;
             else if (a.length !== undefined)
-                s += this._stringifyArray(a);
+                s += `[${this._stringifyArgs(a, false)}]`;
             else if (a.__id !== undefined)
                 s += `${a.constructor.name}@${a.__id}`;
             else if (typeof(a) == "object")
-                s += this._stringifyObject(a);
+                s += `{ ${this._stringifyArgs(a, true)} }`;
             else
                 s += JSON.stringify(a);
         }
@@ -391,6 +365,14 @@ class WebGPUProfiler {
         console.log("RESOLVE", id, time);
     }
 }
+
+WebGPUProfiler._slowMethods = [
+    "createBuffer",
+    "createBindGroup",
+    "createShaderModule",
+    "createRenderPipeline",
+    "createComputePipeline",
+];
 
 WebGPUProfiler._asyncMethods = [
     "requestAdapter",
