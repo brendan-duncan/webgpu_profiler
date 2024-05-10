@@ -1,6 +1,6 @@
 # WebGPU Profiler
 
-> **Work In Progress**
+> **This project is deprecated in favor of [WebGPU Inspector](https://github.com/brendan-duncan/webgpu_inspector)**
 
 WebGPU Profiler is a debugging tool for WebGPU.
 
